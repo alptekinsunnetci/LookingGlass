@@ -16,36 +16,53 @@
  *   I recommend setting a reasonable rate-limit to overcome abuse
  */
 
-// check whether command and host are set
 if (isset($_GET['cmd']) && isset($_GET['host'])) {
     // define available commands
     $cmds = array('host', 'mtr', 'mtr6', 'ping', 'ping6', 'traceroute', 'traceroute6');
+
     // verify command
-    if (in_array($_GET['cmd'], $cmds)) {
+    $cmd = $_GET['cmd'];
+    $host = $_GET['host'];
+
+    if (in_array($cmd, $cmds)) {
         // include required scripts
         $required = array('LookingGlass.php', 'RateLimit.php', 'Config.php');
         foreach ($required as $val) {
-            require 'LookingGlass/' . $val;
-        }
-
-        // lazy check
-        if (!isset($rateLimit)) {
-            $rateLimit = 0;
+            $file = 'LookingGlass/' . $val;
+            if (!file_exists($file)) {
+                exit("Required file $val not found.");
+            }
+            require $file;
         }
 
         // instantiate LookingGlass & RateLimit
-        $lg = new Telephone\LookingGlass();
-        $limit = new Telephone\LookingGlass\RateLimit($rateLimit);
+        try {
+            $rateLimit = $rateLimit ?? 0; // default to 0 if not set
+            $lg = new Telephone\LookingGlass();
+            $limit = new Telephone\LookingGlass\RateLimit($rateLimit);
 
-        // check IP against database
-        $limit->rateLimit($rateLimit);
+            // check IP against database
+            $limit->rateLimit($rateLimit);
 
-        // execute command
-        $output = $lg->$_GET['cmd']($_GET['host']);
-        if ($output) {
-            exit();
+            // execute command safely
+            if (method_exists($lg, $cmd)) {
+                $output = $lg->$cmd($host);
+                if ($output) {
+                    echo $output; // return command output
+                    exit();
+                } else {
+                    exit('Command execution failed.');
+                }
+            } else {
+                exit("Invalid command: $cmd.");
+            }
+        } catch (Exception $e) {
+            exit('Error: ' . $e->getMessage());
         }
+    } else {
+        exit("Command $cmd is not allowed.");
     }
 }
+
 // report error
 exit('Unauthorized request');
